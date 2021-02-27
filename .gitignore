@@ -1,0 +1,12 @@
+*.log
+*.pyc
+.cache/
+.coverage
+.idea/
+.vscode/
+gpt_2.egg-info/
+build/
+dist/
+docs/build/
+venv/
+wheelhouse/
