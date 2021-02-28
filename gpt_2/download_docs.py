@@ -1,6 +1,7 @@
 import os.path
 import pprint
 import csv
+import re
 
 from googleapiclient import errors
 from googleapiclient.discovery import build
@@ -13,6 +14,46 @@ SCOPES = [
     "https://www.googleapis.com/auth/documents.readonly",
     "https://www.googleapis.com/auth/drive.metadata.readonly",
 ]
+
+
+def read_paragraph_element(element):
+    """Returns the text in the given ParagraphElement.
+
+    Args:
+        element: a ParagraphElement from a Google Doc.
+    """
+    text_run = element.get("textRun")
+    if not text_run:
+        return ""
+    return text_run.get("content")
+
+
+def read_structural_elements(elements):
+    """Recurses through a list of Structural Elements to read a document's text where text may be
+    in nested elements.
+
+    Args:
+        elements: a list of Structural Elements.
+    """
+    text = ""
+    for value in elements:
+        if "paragraph" in value:
+            elements = value.get("paragraph").get("elements")
+            for elem in elements:
+                text += read_paragraph_element(elem)
+        elif "table" in value:
+            # The text in table cells are in nested Structural Elements and tables may be
+            # nested.
+            table = value.get("table")
+            for row in table.get("tableRows"):
+                cells = row.get("tableCells")
+                for cell in cells:
+                    text += read_strucutural_elements(cell.get("content"))
+        elif "tableOfContents" in value:
+            # The text in the TOC is also in a Structural Element.
+            toc = value.get("tableOfContents")
+            text += read_structural_elements(toc.get("content"))
+    return text
 
 
 def get_drive_folders(service):
@@ -101,7 +142,13 @@ def main():
     print("Getting all files in folder ...")
     carpet_one_folder_id = folders["Carpet One "]["id"]
     files = get_files_in_folder(drive, carpet_one_folder_id)
-    fieldnames = ["file_name", "file_id", "store_name", "store_location", "page_template"] 
+    fieldnames = [
+        "file_name",
+        "file_id",
+        "store_name",
+        "store_location",
+        "page_template",
+    ]
     with open("flooring_pages.csv", "w") as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
@@ -112,8 +159,32 @@ def main():
             print("-" * 25)
             print(f"File Name: {f['name']}")
             print(f"File ID: {f['id']}")
-            data = {'file_name': f['name'], 'file_id': f['id']}
+            data = {"file_name": f["name"], "file_id": f["id"]}
             writer.writerow(data)
+
+    serial_re = re.compile("C[a-zA-Z0-9]+-[a-zA-Z0-9]+")
+    with open("training_data.csv", "w") as csvfile:
+        writer = csv.writer(csvfile)
+        for name, f in files.items():
+            print("-" * 25)
+            try:
+                doc = docs.documents().get(documentId=f["id"]).execute()
+            except Exception as e:
+                print(f"Could not retrieve document {f['name']}")
+                print("Exception raised:")
+                print(e)
+                continue
+            print(f"Document: {doc['title']}")
+            # print("Body:")
+            # print(doc["body"])
+            doc_content = doc.get('body').get('content')
+            body = read_structural_elements(doc_content)
+            header = re.sub(serial_re, "", doc["title"]).lstrip()
+            print("Header:")
+            print(header)
+            full_text = header + '\n' + body
+            writer.writerow([full_text])
+            # text = name + '\n' + f.get()
 
     # results = (
     #     drive.files()
