@@ -9,7 +9,9 @@ def build_csv():
 
 def main():
     model_name = "355M"
-    dataset = "datasets/training_data.csv"
+    # dataset = "datasets/training_data.csv"
+    dataset = "datasets/raven_labs.txt"
+    run_name = "raven_labs_test"
     # dataset = "./datasets/article.txt"
     if not os.path.isdir(os.path.join("models", model_name)):
         print(f"Downloading {model_name} model...")
@@ -19,10 +21,15 @@ def main():
 
     sess = gpt2.start_tf_sess()
     gpt2.finetune(
-        sess, dataset, restore_from="fresh", model_name=model_name, steps=1000,
-        run_name="first_test" #, multi_gpu=True
+        sess,
+        dataset,
+        restore_from="fresh",
+        model_name=model_name,
+        steps=1000,
+        run_name=run_name,
+        sample_length=50,
+        multi_gpu=False,
     )
-    gpt2.generate(sess)
 
 
 if __name__ == "__main__":

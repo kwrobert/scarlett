@@ -11,8 +11,8 @@ from google.oauth2.credentials import Credentials
 
 # If modifying these scopes, delete the file token.json.
 SCOPES = [
-    "https://www.googleapis.com/auth/documents.readonly",
-    "https://www.googleapis.com/auth/drive.metadata.readonly",
+    "https://www.googleapis.com/auth/documents",
+    "https://www.googleapis.com/auth/drive.readonly",
 ]
 
 
@@ -110,38 +110,106 @@ def get_files_in_folder(service, folder_id):
             break
     return files
 
+def get_files_matching_prefix(service, prefix):
+    page_token = None
+    files = {}
+    while True:
+        try:
+            param = {
+                "q": f"mimeType != 'application/vnd.google-apps.folder' and name contains '{prefix}'",
+                "fields": "nextPageToken, files(id, name)",
+            }
+            if page_token:
+                param["pageToken"] = page_token
+            response = service.files().list(**param).execute()
+            for f in response.get("files", []):
+                # print("File Id: %s" % child["id"])
+                if not f.get('name').startswith(prefix):
+                    continue
+                files[f.get("name")] = f
+            page_token = response.get("nextPageToken")
+            if page_token is None:
+                break
+        except errors.HttpError as error:
+            print("An error occurred: %s" % error)
+            break
+    return files
 
-def main():
+def get_files_matching_regex(service, regex):
+    compiled_re = re.compile(regex)
+    page_token = None
+    files = {}
+    while True:
+        try:
+            param = {
+                "q": f"mimeType != 'application/vnd.google-apps.folder'",
+                "fields": "nextPageToken, files(id, name)",
+            }
+            if page_token:
+                param["pageToken"] = page_token
+            response = service.files().list(**param).execute()
+            for f in response.get("files", []):
+                # print("File Id: %s" % child["id"])
+                if re.search(compiled_re, f.get('name')) is None:
+                    continue
+                files[f.get("name")] = f
+            page_token = response.get("nextPageToken")
+            if page_token is None:
+                break
+        except errors.HttpError as error:
+            print("An error occurred: %s" % error)
+            break
+    return files
+
+
+def get_creds(creds_path, token_path):
+    # creds_file = "dlahoodbb_at_gmail_dot_com_creds.json"
     creds = None
     # The file token.json stores the user's access and refresh tokens, and is
     # created automatically when the authorization flow completes for the first
     # time.
-    if os.path.exists("token.json"):
-        creds = Credentials.from_authorized_user_file("token.json", SCOPES)
+    if os.path.exists(token_path):
+        creds = Credentials.from_authorized_user_file(token_path, SCOPES)
     # If there are no (valid) credentials available, let the user log in.
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
-            flow = InstalledAppFlow.from_client_secrets_file("credentials.json", SCOPES)
+            flow = InstalledAppFlow.from_client_secrets_file(creds_path, SCOPES)
             creds = flow.run_local_server(port=0)
         # Save the credentials for the next run
-        with open("token.json", "w") as token:
+        with open(token_path, "w") as token:
             token.write(creds.to_json())
+    return creds
 
+
+def main():
+
+    creds_file = "dlahoodbb_at_gmail_dot_com_creds.json"
+    creds = get_creds(creds_file, "gmail_token.json")
     drive = build("drive", "v3", credentials=creds)
     docs = build("docs", "v1", credentials=creds)
-    # Call the Drive v3 API
+
     print("Retrieving all folders ...")
     folders = get_drive_folders(drive)
-    # for name, f in folders.items():
-    #     print("-" * 25)
-    #     print(f"Folder Name: {f['name']}")
-    #     print(f"Folder ID: {f['id']}")
-    pprint.pprint(folders.keys())
     print("Getting all files in folder ...")
     carpet_one_folder_id = folders["Carpet One "]["id"]
     files = get_files_in_folder(drive, carpet_one_folder_id)
+    file_names = list(files.keys())
+    print(f"Number of files: {len(file_names)}")
+
+    # # files = get_files_matching_prefix(drive, "C")
+    # creds_file = "dlahood_at_carpetone_dot_com_gmail_creds.json"
+    # creds = get_creds(creds_file, "carpetone_token.json")
+    # drive = build("drive", "v3", credentials=creds)
+    # docs = build("docs", "v1", credentials=creds)
+    # # files.update(get_files_matching_regex(drive, "C[a-zA-Z0-9]+-[a-zA-Z0-9]+"))
+    # files = get_files_matching_regex(drive, "C[a-zA-Z0-9]+-[a-zA-Z0-9]+")
+    # file_names = list(files.keys())
+    # # for k in files.keys():
+    # #     print(k) 
+    # print(f"Number of files: {len(file_names)}")
+
     fieldnames = [
         "file_name",
         "file_id",
@@ -149,7 +217,7 @@ def main():
         "store_location",
         "page_template",
     ]
-    with open("flooring_pages.csv", "w") as csvfile:
+    with open("flooring_pages.csv", "a") as csvfile:
         writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
         writer.writeheader()
         for name, f in files.items():
@@ -163,7 +231,7 @@ def main():
             writer.writerow(data)
 
     serial_re = re.compile("C[a-zA-Z0-9]+-[a-zA-Z0-9]+")
-    with open("training_data.csv", "w") as csvfile:
+    with open("training_data.csv", "a") as csvfile:
         writer = csv.writer(csvfile)
         for name, f in files.items():
             print("-" * 25)
