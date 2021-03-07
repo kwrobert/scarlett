@@ -2,6 +2,8 @@ import os.path
 import pprint
 import csv
 import re
+import argparse
+import pathlib
 
 from googleapiclient import errors
 from googleapiclient.discovery import build
@@ -14,6 +16,9 @@ SCOPES = [
     "https://www.googleapis.com/auth/documents",
     "https://www.googleapis.com/auth/drive.readonly",
 ]
+
+SCRIPT_DIR = pathlib.Path(__file__).parent.absolute()
+DEFAULT_DATA_DIR = SCRIPT_DIR.joinpath( "..", "data", "raw")
 
 
 def read_paragraph_element(element):
@@ -48,7 +53,7 @@ def read_structural_elements(elements):
             for row in table.get("tableRows"):
                 cells = row.get("tableCells")
                 for cell in cells:
-                    text += read_strucutural_elements(cell.get("content"))
+                    text += read_structural_elements(cell.get("content"))
         elif "tableOfContents" in value:
             # The text in the TOC is also in a Structural Element.
             toc = value.get("tableOfContents")
@@ -56,7 +61,7 @@ def read_structural_elements(elements):
     return text
 
 
-def get_drive_folders(service):
+def get_google_drive_folders(service):
     all_files = dict()
     page_token = None
     while True:
@@ -81,42 +86,37 @@ def get_drive_folders(service):
     return all_files
 
 
-def get_files_in_folder(service, folder_id):
-    """Print files belonging to a folder.
-
-    Args:
-      service: Drive API service instance.
-      folder_id: ID of the folder to print files from.
+def get_google_drive_files(service, folder_id='', regex='', prefix=''):
     """
-    page_token = None
-    files = {}
-    while True:
-        try:
-            param = {
-                "q": f"'{folder_id}' in parents",
-                "fields": "nextPageToken, files(id, name)",
-            }
-            if page_token:
-                param["pageToken"] = page_token
-            response = service.files().list(**param).execute()
-            for f in response.get("files", []):
-                # print("File Id: %s" % child["id"])
-                files[f.get("name")] = f
-            page_token = response.get("nextPageToken")
-            if page_token is None:
-                break
-        except errors.HttpError as error:
-            print("An error occurred: %s" % error)
-            break
-    return files
+    Get file objects from Google Drive API with optional filters
 
-def get_files_matching_prefix(service, prefix):
+    Parameters
+    ----------
+    service : 
+        Drive API service instance
+    folder : str
+        Folder ID of folder to restrict list of files to
+    regex : str
+        A regex that must be contained within the file name
+    prefix : str
+        A prefix that must match the beginning of the file name
+    """
+    if regex:
+        compiled_re = re.compile(regex)
+        has_regex = lambda name: re.search(compiled_re, name) is not None
+    else:
+        has_regex = lambda name: True
+    query = "mimeType != 'application/vnd.google-apps.folder'"
+    if folder_id:
+        query += f" and '{folder_id}' in parents"
+    if prefix:
+        query += f"  and name contains '{prefix}'"
     page_token = None
     files = {}
     while True:
         try:
             param = {
-                "q": f"mimeType != 'application/vnd.google-apps.folder' and name contains '{prefix}'",
+                "q": query,
                 "fields": "nextPageToken, files(id, name)",
             }
             if page_token:
@@ -124,33 +124,7 @@ def get_files_matching_prefix(service, prefix):
             response = service.files().list(**param).execute()
             for f in response.get("files", []):
                 # print("File Id: %s" % child["id"])
-                if not f.get('name').startswith(prefix):
-                    continue
-                files[f.get("name")] = f
-            page_token = response.get("nextPageToken")
-            if page_token is None:
-                break
-        except errors.HttpError as error:
-            print("An error occurred: %s" % error)
-            break
-    return files
-
-def get_files_matching_regex(service, regex):
-    compiled_re = re.compile(regex)
-    page_token = None
-    files = {}
-    while True:
-        try:
-            param = {
-                "q": f"mimeType != 'application/vnd.google-apps.folder'",
-                "fields": "nextPageToken, files(id, name)",
-            }
-            if page_token:
-                param["pageToken"] = page_token
-            response = service.files().list(**param).execute()
-            for f in response.get("files", []):
-                # print("File Id: %s" % child["id"])
-                if re.search(compiled_re, f.get('name')) is None:
+                if not has_regex(f.get('name')):
                     continue
                 files[f.get("name")] = f
             page_token = response.get("nextPageToken")
@@ -183,33 +157,7 @@ def get_creds(creds_path, token_path):
     return creds
 
 
-def main():
-
-    creds_file = "dlahoodbb_at_gmail_dot_com_creds.json"
-    creds = get_creds(creds_file, "gmail_token.json")
-    drive = build("drive", "v3", credentials=creds)
-    docs = build("docs", "v1", credentials=creds)
-
-    print("Retrieving all folders ...")
-    folders = get_drive_folders(drive)
-    print("Getting all files in folder ...")
-    carpet_one_folder_id = folders["Carpet One "]["id"]
-    files = get_files_in_folder(drive, carpet_one_folder_id)
-    file_names = list(files.keys())
-    print(f"Number of files: {len(file_names)}")
-
-    # # files = get_files_matching_prefix(drive, "C")
-    # creds_file = "dlahood_at_carpetone_dot_com_gmail_creds.json"
-    # creds = get_creds(creds_file, "carpetone_token.json")
-    # drive = build("drive", "v3", credentials=creds)
-    # docs = build("docs", "v1", credentials=creds)
-    # # files.update(get_files_matching_regex(drive, "C[a-zA-Z0-9]+-[a-zA-Z0-9]+"))
-    # files = get_files_matching_regex(drive, "C[a-zA-Z0-9]+-[a-zA-Z0-9]+")
-    # file_names = list(files.keys())
-    # # for k in files.keys():
-    # #     print(k) 
-    # print(f"Number of files: {len(file_names)}")
-
+def write_csv(files):
     fieldnames = [
         "file_name",
         "file_id",
@@ -230,29 +178,100 @@ def main():
             data = {"file_name": f["name"], "file_id": f["id"]}
             writer.writerow(data)
 
-    serial_re = re.compile("C[a-zA-Z0-9]+-[a-zA-Z0-9]+")
-    with open("training_data.csv", "a") as csvfile:
-        writer = csv.writer(csvfile)
-        for name, f in files.items():
-            print("-" * 25)
-            try:
-                doc = docs.documents().get(documentId=f["id"]).execute()
-            except Exception as e:
-                print(f"Could not retrieve document {f['name']}")
-                print("Exception raised:")
-                print(e)
-                continue
-            print(f"Document: {doc['title']}")
-            # print("Body:")
-            # print(doc["body"])
-            doc_content = doc.get('body').get('content')
-            body = read_structural_elements(doc_content)
-            header = re.sub(serial_re, "", doc["title"]).lstrip()
-            print("Header:")
-            print(header)
-            full_text = header + '\n' + body
-            writer.writerow([full_text])
-            # text = name + '\n' + f.get()
+
+def download_files(docs, files, out_dir):
+    for name, f in files.items():
+        print("-" * 25)
+        try:
+            doc = docs.documents().get(documentId=f["id"]).execute()
+        except Exception as e:
+            print(f"Could not retrieve document {name}")
+            print("Exception raised:")
+            print(e)
+            continue
+        print(f"Downloading document: {doc['title']}")
+        doc_content = doc.get('body').get('content')
+        body = read_structural_elements(doc_content)
+        fname = f"{name}.txt".replace("/", "")
+        out_path = pathlib.Path(out_dir).joinpath(fname)
+        with open(out_path, 'w') as out_f:
+            out_f.write(body)
+
+
+def main():
+
+    parser = argparse.ArgumentParser(description="Download utility for Google Docs")
+    parser.add_argument('-t', '--token', required=True, type=str, help="Path to API token JSON file")
+    parser.add_argument('-c', '--credentials', required=True, type=str, help="Path to API credentials JSON file")
+    parser.add_argument('-o', '--output-dir', type=str, default=DEFAULT_DATA_DIR, help="Path to directory for downloading data")
+    parser.add_argument('-f', '--folder', type=str, default='', help="Google Docs folder to pull data from")
+    parser.add_argument('-r', '--regex', type=str, default='', help="Regex that must match any part of the downloaded file names")
+    parser.add_argument('-s', '--skip', action='store_true', default=False, help="Skip file  names that have already been downloaded")
+    args = parser.parse_args()
+
+    p = pathlib.Path(args.output_dir).glob('*.txt')
+    existing_files = set(x.with_suffix('').name for x in p if x.is_file())
+    for arg in (args.token, args.credentials):
+        if not os.path.isfile(arg):
+            raise ValueError("Argument {arg} is not a valid path")
+    creds = get_creds(args.credentials, args.token)
+    drive = build("drive", "v3", credentials=creds)
+    docs = build("docs", "v1", credentials=creds)
+
+    folder_id = ''
+    if args.folder:
+        print("Retrieving all folders ...")
+        folders = get_google_drive_folders(drive)
+        folder_id = folders[args.folder]["id"]
+
+    print("Getting files ...")
+    if args.regex:
+        print(f"Files must match {args.regex}")
+    if args.folder:
+        print(f"Files must be in {args.folder}")
+    files = get_google_drive_files(drive, folder_id=folder_id, regex=args.regex)
+    print(f"Number of files found: {len(files)}")
+    if args.skip:
+        files = {k: v for k, v in files.items() if k not in existing_files}
+    print(f"Number of files to download: {len(files)}")
+    download_files(docs, files, args.output_dir)
+
+    # # files = get_files_matching_prefix(drive, "C")
+    # creds_file = "dlahood_at_carpetone_dot_com_gmail_creds.json"
+    # creds = get_creds(creds_file, "carpetone_token.json")
+    # drive = build("drive", "v3", credentials=creds)
+    # docs = build("docs", "v1", credentials=creds)
+    # # files.update(get_files_matching_regex(drive, "C[a-zA-Z0-9]+-[a-zA-Z0-9]+"))
+    # files = get_files_matching_regex(drive, "C[a-zA-Z0-9]+-[a-zA-Z0-9]+")
+    # file_names = list(files.keys())
+    # # for k in files.keys():
+    # #     print(k) 
+    # print(f"Number of files: {len(file_names)}")
+
+
+    # serial_re = re.compile("C[a-zA-Z0-9]+-[a-zA-Z0-9]+")
+    # with open("training_data.csv", "a") as csvfile:
+    #     writer = csv.writer(csvfile)
+    #     for name, f in files.items():
+    #         print("-" * 25)
+    #         try:
+    #             doc = docs.documents().get(documentId=f["id"]).execute()
+    #         except Exception as e:
+    #             print(f"Could not retrieve document {f['name']}")
+    #             print("Exception raised:")
+    #             print(e)
+    #             continue
+    #         print(f"Document: {doc['title']}")
+    #         # print("Body:")
+    #         # print(doc["body"])
+    #         doc_content = doc.get('body').get('content')
+    #         body = read_structural_elements(doc_content)
+    #         header = re.sub(serial_re, "", doc["title"]).lstrip()
+    #         print("Header:")
+    #         print(header)
+    #         full_text = header + '\n' + body
+    #         writer.writerow([full_text])
+    #         # text = name + '\n' + f.get()
 
     # results = (
     #     drive.files()
