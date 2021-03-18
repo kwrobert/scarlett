@@ -53,3 +53,35 @@ Hit out of memory error. Tried setting `multi_gpu=True` and didn't hit OOM error
 ## New Things To Try
 
 Dunno, opened an issue on Github and we'll see what comes of it.
+
+# Experiment 3: experiment_3_355M
+
+## Summary and Goal 
+
+Experiment 1 went pretty well, but I think with labeled training data we might get better results. To this end, instead of just chucking the raw text into the model I created writing samples with the following structure: 
+
+```
+[LABELS] 
+
+title: Wrucks Carpet One Floor & Home Backsplash Tile Page Update
+
+store_name: Wrucks Carpet One Floor & Home
+
+store_location: Wasilla United States
+
+page_template: Backsplash Tile Page Update
+
+keywords: stone tile backsplash:tile samples
+
+[BODY]
+
+<article body here>
+```
+
+To get the store location, I used the `geography` Python package to do automatic location extraction from the article body, and just included all locations that were in the United States or Canada (crude, but I don't want to spend days on data preprocessing). Keyword are really "keywords and phrases" and came from a list of keywords files that I used to build a "keyword corpus". The store name I had to do a little bit of string-processing-tap-dancing to get right, and it's still a bit crude. The title was each and the page template is the title minus the store name.
+
+My hope is that by training the model with this structured data, the model will learn to make correlations between the metadata in the labels with parts of the body. We can provide the LABELS section as a prefix when generating new samples and hopefully get better results. 
+
+## Results
+
+## New Things To Try

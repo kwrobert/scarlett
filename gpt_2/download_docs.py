@@ -157,26 +157,6 @@ def get_creds(creds_path, token_path):
     return creds
 
 
-def write_csv(files):
-    fieldnames = [
-        "file_name",
-        "file_id",
-        "store_name",
-        "store_location",
-        "page_template",
-    ]
-    with open("flooring_pages.csv", "a") as csvfile:
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
-        writer.writeheader()
-        for name, f in files.items():
-            if name[0] != "C":
-                print(f"Skipping file name: {name}")
-                continue
-            print("-" * 25)
-            print(f"File Name: {f['name']}")
-            print(f"File ID: {f['id']}")
-            data = {"file_name": f["name"], "file_id": f["id"]}
-            writer.writerow(data)
 
 
 def download_files(docs, files, out_dir):

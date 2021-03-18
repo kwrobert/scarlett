@@ -12,11 +12,16 @@ def main():
         # "I-Five Carpet One Floor & Home Kitchen and Bathroom Tile"
         # "Types of Luxury Vinyl",
         # "Waterproof Vinyl Page",
-        # "Stain Resistant Carpet",
+        "Stain Resistant Carpet Page",
+        "Types of Vinyl Page",
+        "Commercial Flooring Page"
         # "Stair Runner Carpet",
         # "Types of Carpet",
-        "Waterproof Luxury Vinyl",
+        # "Waterproof Luxury Vinyl",
+        # "Custom Area Rugs"
+        "Carpet Guide Page"
     ]
+    
     # gen_file = "generated_samples/gpt2_gentext_{:%Y%m%d_%H%M%S}.txt".format(
     #     datetime.utcnow()
     # )

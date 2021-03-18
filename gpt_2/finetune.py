@@ -10,8 +10,8 @@ def build_csv():
 def main():
     model_name = "355M"
     # dataset = "datasets/training_data.csv"
-    dataset = "datasets/raven_labs.txt"
-    run_name = "raven_labs_test"
+    dataset = "data/processed/training_data_march_17_2021.csv"
+    run_name = "experiment_3_355M"
     # dataset = "./datasets/article.txt"
     if not os.path.isdir(os.path.join("models", model_name)):
         print(f"Downloading {model_name} model...")
@@ -27,7 +27,7 @@ def main():
         model_name=model_name,
         steps=1000,
         run_name=run_name,
-        sample_length=50,
+        sample_length=1023,
         multi_gpu=False,
     )
 
