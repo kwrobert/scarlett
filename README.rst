@@ -1,5 +1,9 @@
-gpt-2
-=====
+Scarlett
+========
+
+This is me playing around with some GPT-2 models to automated generating
+marketing content for my girlfriend. We have affectionately named the model
+Scarlett after Scarlett Johansen's voice-role in the movie Her.
 
 .. contents:: **Table of Contents**
     :backlinks: none
@@ -15,15 +19,9 @@ Python 2.7/3.5+ and PyPy.
 
     $ pip install gpt-2
 
-License
--------
 
-gpt-2 is distributed under the terms of both
-
-- `MIT License <https://choosealicense.com/licenses/mit>`_
-- `Apache License, Version 2.0 <https://choosealicense.com/licenses/apache-2.0>`_
-
-at your option.
+Usage
+-----
 
 The `prefix` argument to `generate` is where you can provide a starting prompt to
 the text generation. The generated text is a "prediction" of what is most
@@ -38,3 +36,13 @@ Subject keywords: <keywords describing subject of the article goes here>
 ```
 
 And pass that to the `generate` to get some meaningful, store-specific results.
+
+License
+-------
+
+gpt-2 is distributed under the terms of both
+
+- `MIT License <https://choosealicense.com/licenses/mit>`_
+- `Apache License, Version 2.0 <https://choosealicense.com/licenses/apache-2.0>`_
+
+at your option.
